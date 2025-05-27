@@ -121,18 +121,67 @@ figures = [
 ]
 
 readings = [
-    "State and Revolution by Lenin",
-    "Wage-Labor and Capital by Marx",
-    "Imperialism: the Highest Stage of Capitalism by Lenin",
-    "On Practice by Mao",
-    "Reform or Revolution by Luxemburg",
-    "Socialism: Utopian and Scientific by Engels",
-    "'Left wing communism' and infantile disorder by Lenin",
-    "The origins of the Family, Private property and the state by Engels",
-    "Critique of the Gotha programme by Marx",
-    "what is to be done by Lenin",
-    "dialectical and Historical Materialism by Stalin",
-    "Permanent Revolution by Trotsky"
+    {
+        "title": "State and Revolution",
+        "author": "Vladimir Lenin",
+        "url": "https://www.marxists.org/archive/lenin/works/1917/staterev/"
+    },
+    {
+        "title": "Wage-Labor and Capital",
+        "author": "Karl Marx",
+        "url": "https://www.marxists.org/archive/marx/works/1847/wage-labour/"
+    },
+    {
+        "title": "Imperialism: The Highest Stage of Capitalism",
+        "author": "Vladimir Lenin",
+        "url": "https://www.marxists.org/archive/lenin/works/1916/imp-hsc/"
+    },
+    {
+        "title": "On Practice",
+        "author": "Mao Zedong",
+        "url": "https://www.marxists.org/reference/archive/mao/selected-works/volume-1/mswv1_16.htm"
+    },
+    {
+        "title": "Reform or Revolution",
+        "author": "Rosa Luxemburg",
+        "url": "https://www.marxists.org/archive/luxemburg/1900/reform-revolution/"
+    },
+    {
+        "title": "Socialism: Utopian and Scientific",
+        "author": "Friedrich Engels",
+        "url": "https://www.marxists.org/archive/marx/works/1880/soc-utop/"
+    },
+    {
+        "title": "'Left-Wing' Communism: An Infantile Disorder",
+        "author": "Vladimir Lenin",
+        "url": "https://www.marxists.org/archive/lenin/works/1920/lwc/"
+    },
+    {
+        "title": "The Origin of the Family, Private Property and the State",
+        "author": "Friedrich Engels",
+        "url": "https://www.marxists.org/archive/marx/works/1884/origin-family/"
+    },
+    {
+        "title": "Critique of the Gotha Programme",
+        "author": "Karl Marx",
+        "url": "https://www.marxists.org/archive/marx/works/1875/gotha/"
+    },
+    {
+        "title": "What Is To Be Done?",
+        "author": "Vladimir Lenin",
+        "url": "https://www.marxists.org/archive/lenin/works/1901/witbd/"
+    },
+    {
+        "title": "Dialectical and Historical Materialism",
+        "author": "Joseph Stalin",
+        "url": "https://www.marxists.org/reference/archive/stalin/works/1938/09.htm"
+    },
+    {
+        "title": "Permanent Revolution",
+        "author": "Leon Trotsky",
+        "url": "https://www.marxists.org/archive/trotsky/1931/tpr/index.htm"
+    },
+]
 
 @bot.tree.command(name="randomfigure", description="Get a random revolutionary figure and short bio.")
 async def random_figure_command(interaction: discord.Interaction):
@@ -140,10 +189,18 @@ async def random_figure_command(interaction: discord.Interaction):
     await interaction.response.send_message(figure)
 
 #Slash command: /reading
-@bot.tree.command(name="reading", description="Get a recommended socialist/communist text.")
+@bot.tree.command(name="reading", description="Get a recommended socialist or communist text to read.")
 async def reading_command(interaction: discord.Interaction):
-    reading = random.choice(readings)
-    await interaction.response.send_message(reading)
+    item = random.choice(readings)
+
+    embed = discord.Embed(
+        title=item["title"],
+        url=item["url"],  # Clickable title
+        description=f"**Author:** {item['author']}\n[Read it here]({item['url']})",
+        color=0xE00000
+    )
+
+    await interaction.response.send_message(embed=embed)
 
 #Slash command
 @bot.tree.command(name="quote", description="Get a random communist quote.")
