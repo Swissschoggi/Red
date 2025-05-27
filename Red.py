@@ -7,24 +7,24 @@ import datetime
 import os
 from dotenv import load_dotenv
 
-# Load .env variables
+#Load .env variables
 load_dotenv()
 TOKEN = os.getenv('TOKEN')
 
-# Logging setup
+#Logging setup
 handler = logging.FileHandler(filename='discord.log', encoding='utf-8', mode='w')
 
-# Intents setup
+#Intents setup
 intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True
 
-# Bot setup
+#Bot setup
 bot = commands.Bot(command_prefix='!', intents=intents)
 
-# Quote list
+#Quote list
 
-# Quote list
+#Quote list
 quotes = [
     "Religious suffering is, at one and the same time, the expression of real suffering and a protest against real suffering. Religion is the sigh of the oppressed creature, the heart of a heartless world, and the soul of soulless conditions. It is the opium of the people.",
     "Private property has made us so stupid and one-sided that an object is only ours when we have it – when it exists for us as capital, or when it is directly possessed, eaten, drunk, worn, inhabited, etc., – in short, when it is used by us. Although private property itself again conceives all these direct realisations of possession only as means of life, and the life which they serve as means is the life of private property – labour and conversion into capital.",
@@ -114,30 +114,35 @@ facts = [
 ]
 
 
-# Slash command
+#Slash command
 @bot.tree.command(name="quote", description="Get a random communist quote.")
 async def quote_command(interaction: discord.Interaction):
     selected = random.choice(quotes)
     await interaction.response.send_message(selected)# Store per-guild daily quote channels
 daily_quote_channels = {}
 
-# Slash command: setup daily quotes
-@bot.tree.command(name="dailyquote", description="Send a daily quote to a selected channel.")
-@app_commands.describe(channel="Select the channel to receive daily quotes")
-async def daily_quote(interaction: discord.Interaction, channel: discord.TextChannel):
+#Slash command: setup daily quotes
+@bot.tree.command(name="setdailyquotes", description="Set the channel and optional role for daily quotes.")
+@app_commands.describe(channel="The channel for daily quotes", role="Optional role to mention")
+async def set_daily_quotes(interaction: discord.Interaction, channel: discord.TextChannel, role: discord.Role = None):
     guild_id = interaction.guild_id
-    daily_quote_channels[guild_id] = channel.id
-    await interaction.response.send_message(f" ^|^e Daily quotes will be sent to {channel.mention}!", ephe>
+    daily_quote_channels[guild_id] = {
+        "channel_id": channel.id,
+        "role_id": role.id if role else None
+    }
+    await interaction.response.send_message(f"✅ Daily quotes will be sent to {channel.mention}" + (f" and mention {role.mention}" if role else ""))
 
-# Background task to send daily quote
-@tasks.loop(time=datetime.time(hour=9, minute=0))  # UTC 9:00 daily
-async def send_daily_quotes():
-    for guild_id, channel_id in daily_quote_channels.items():
-        channel = bot.get_channel(channel_id)
+#Background task to send daily quote
+@tasks.loop(time=datetime.time(hour=9, minute=0))  # or your chosen time
+async def send_daily_quote():
+    for guild_id, data in daily_quote_channels.items():
+        channel = bot.get_channel(data["channel_id"])
+        role_id = data.get("role_id")
+
         if channel:
             quote = random.choice(quotes)
-            try:
-                await channel.send(f" ^=^s^| Daily Quote:\n> {quote}")
+            mention = f"<@&{role_id}> " if role_id else ""
+            await channel.send(f"{mention}{quote}")
             except Exception as e:
                 print(f"Failed to send quote to {channel.name}: {e}")
 
@@ -156,7 +161,7 @@ async def fact_command(interaction: discord.Interaction):
     selected_fact = random.choice(facts)
     await interaction.response.send_message(selected_fact)
 
-# Sync commands & start loop
+#Sync commands & start loop
 @bot.event
 async def on_ready():
     await bot.tree.sync()
