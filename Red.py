@@ -183,6 +183,22 @@ readings = [
     },
 ]
 
+reaction = [
+    "but communism has never worked out like that has it.",
+    "Funny how every 'communist' is from a country that never experienced communism",
+    "Leads to corruption and starvation.",
+    "Name one successful commmunist country and dont say china",
+    "Try living in a communist state",
+    "Move to Russia if you love communism so much",
+    "Move to North Korea if you love communism so much",
+    "Move to China if you love communism so much",
+    "Communism is totalitarian regime where people (especially ones that aint of majority nationality) get scraps while working underpaid jobs in PLANNED ECONOMY that literally destroys economy by lowering price of planned produce too much and causing massive inflation making money useless",
+    "Show me a country where..., 'The workers control the state'",
+    "I wonder why all Warsaw pact countries all ditched communism when the soviet union fell.",
+    "to what side of the wall did they flee?",
+    "COMMUNISM does not work"
+]
+
 @bot.tree.command(name="randomfigure", description="Get a random revolutionary figure and short bio.")
 async def random_figure_command(interaction: discord.Interaction):
     figure = random.choice(figures)
@@ -202,12 +218,17 @@ async def reading_command(interaction: discord.Interaction):
 
     await interaction.response.send_message(embed=embed)
 
-#Slash command
+#Slash command: Quote
 @bot.tree.command(name="quote", description="Get a random communist quote.")
 async def quote_command(interaction: discord.Interaction):
     selected = random.choice(quotes)
     await interaction.response.send_message(selected)# Store per-guild daily quote channels
 daily_quote_channels = {}
+
+@bot.tree.command(name="reactionary", description="Get a random reactionary reaction.")
+async def reactionary_command(interaction: discord.Interaction):
+    item = random.choice(reaction)
+    await interaction.response.send_message(item)
 
 #Slash command: setup daily quotes
 @bot.tree.command(name="setdailyquotes", description="Set the channel and optional role for daily quotes.")
