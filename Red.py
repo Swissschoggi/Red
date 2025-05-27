@@ -124,27 +124,28 @@ daily_quote_channels = {}
 #Slash command: setup daily quotes
 @bot.tree.command(name="setdailyquotes", description="Set the channel and optional role for daily quotes.")
 @app_commands.describe(channel="The channel for daily quotes", role="Optional role to mention")
+@app_commands.checks.has_permissions(administrator=True)
 async def set_daily_quotes(interaction: discord.Interaction, channel: discord.TextChannel, role: discord.Role = None):
     guild_id = interaction.guild_id
     daily_quote_channels[guild_id] = {
         "channel_id": channel.id,
         "role_id": role.id if role else None
     }
-    await interaction.response.send_message(f"✅ Daily quotes will be sent to {channel.mention}" + (f" and mention {role.mention}" if role else ""))
+    await interaction.response.send_message(
+        f"✅ Daily quotes will be sent to {channel.mention}" + (f" and mention {role.mention}" if role else "")
+    )
 
 #Background task to send daily quote
-@tasks.loop(time=datetime.time(hour=9, minute=0))  # or your chosen time
-async def send_daily_quote():
-    for guild_id, data in daily_quote_channels.items():
-        channel = bot.get_channel(data["channel_id"])
-        role_id = data.get("role_id")
+@bot.tree.command(name="stopdaily", description="Stop daily quotes in this server.")
+@app_commands.checks.has_permissions(administrator=True)
+async def stop_daily_command(interaction: discord.Interaction):
+    guild_id = interaction.guild_id
 
-        if channel:
-            quote = random.choice(quotes)
-            mention = f"<@&{role_id}> " if role_id else ""
-            await channel.send(f"{mention}{quote}")
-            except Exception as e:
-                print(f"Failed to send quote to {channel.name}: {e}")
+    if guild_id in daily_quote_channels:
+        del daily_quote_channels[guild_id]
+        await interaction.response.send_message("🛑 Daily quotes have been stopped for this server.")
+    else:
+        await interaction.response.send_message("ℹ️ No daily quote is currently set for this server.")
 
 @bot.tree.command(name="stopdaily", description="Stop daily quotes in this server.")
 async def stop_daily_command(interaction: discord.Interaction):
