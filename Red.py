@@ -110,9 +110,40 @@ facts = [
     "The hammer and sickle symbol originated in Soviet Russia and symbolizes the unity of workers and peasants.",
     "Mao Zedong led the Chinese Communist Party to victory in 1949, establishing the People's Republic of China.",
     "The phrase 'dictatorship of the proletariat' describes a transitional socialist state after revolution.",
-    "Cuba became a socialist state after the 1959 revolution led by Fidel Castro and Che Guevara."
+    "Cuba became a socialist state after the 1959 revolution led by Fidel Castro and Che Guevara.",
+    "In 2008, Communist philosopher Karl Marx's book Capital (Das Kapital) became a surprise bestseller in the United States due to the economic recession."
 ]
 
+figures = [
+    "In the mid-20th century, over one-third of the world's population lived under a Communist government.",
+    "40% of Americans have a favorable view of socialism, up from 36% in 2019. Socialist sentiment is increasing among younger generations with Gen Z’s favorability at 49%, up from 40% in 2019.",
+    "The USSR acknowledged a total of 95 Communist parties"
+]
+
+readings = [
+    "State and Revolution by Lenin",
+    "Wage-Labor and Capital by Marx",
+    "Imperialism: the Highest Stage of Capitalism by Lenin",
+    "On Practice by Mao",
+    "Reform or Revolution by Luxemburg",
+    "Socialism: Utopian and Scientific by Engels",
+    "'Left wing communism' and infantile disorder by Lenin",
+    "The origins of the Family, Private property and the state by Engels",
+    "Critique of the Gotha programme by Marx",
+    "what is to be done by Lenin",
+    "dialectical and Historical Materialism by Stalin",
+    "Permanent Revolution by Trotsky"
+
+@bot.tree.command(name="randomfigure", description="Get a random revolutionary figure and short bio.")
+async def random_figure_command(interaction: discord.Interaction):
+    figure = random.choice(figures)
+    await interaction.response.send_message(figure)
+
+#Slash command: /reading
+@bot.tree.command(name="reading", description="Get a recommended socialist/communist text.")
+async def reading_command(interaction: discord.Interaction):
+    reading = random.choice(readings)
+    await interaction.response.send_message(reading)
 
 #Slash command
 @bot.tree.command(name="quote", description="Get a random communist quote.")
@@ -170,5 +201,5 @@ async def on_ready():
     print(f"Bot ready as {bot.user}")
 
 
-# Run bot
+#Run bot
 bot.run(TOKEN)
