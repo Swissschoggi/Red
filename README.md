@@ -10,5 +10,5 @@ Random figure - Get a random figure about communism.
 Reactionary - Get a random reactionary comment from one of my tiktok videos.
 Reading - Get reading reccommendations
 
-#ALWAYS OPEN FOR RECCOMMENDATIONS FOR THE BOT!!
+**ALWAYS OPEN FOR RECCOMMENDATIONS FOR THE BOT!!**
 Discord: fynninyoass
