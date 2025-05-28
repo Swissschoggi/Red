@@ -31,7 +31,7 @@ with open("data.json", "r", encoding="utf-8") as f:
 
 quotes = data["quotes"]
 facts = data["facts"]
-reaction = data["reaction"]
+reactionary_reactions = data["reactionary_reactions"]
 
 load_dotenv()
 
