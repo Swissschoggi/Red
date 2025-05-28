@@ -20,6 +20,11 @@ Supports both **slash** (`/`) and **prefix** (`!`) commands:
 
 ---
 
+## To host Red by yourself, here is the docker image:
+[Docker image](https://hub.docker.com/repository/docker/swissschoggi/red/tags/latest/sha256-27e8c9a18aabefa31f2fe1e3f99fbdfd8b4c4f853be04abc0acbc1d4d3cb7784)
+
+---
+
 ## 🗳️ Suggestions Welcome!
 
 **Always open for recommendations to improve the bot!**
