@@ -12,6 +12,8 @@ Supports both **slash** (`/`) and **prefix** (`!`) commands:
 - **`/randomfigure` / `!randomfigure`** – Sends a random revolutionary figure with a short bio
 - **`/reactionary` / `!reactionary`** – Sends a reactionary reaction from one of my TikTok comments
 - **`/reading` / `!reading`** – Sends a random reading reccomendation
+- **`/studygroup`** - creates a temporary voice-channel for book study groups
+- **`/asklenin`** - Experimental feature currently hosted on my local LLM.
 
 ---
 
