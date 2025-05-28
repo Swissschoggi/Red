@@ -22,6 +22,8 @@ intents.members = True
 #Bot setup
 bot = commands.Bot(command_prefix='!', intents=intents)
 
+daily_quote_channels = {}
+
 quotes = [
     "Religious suffering is, at one and the same time, the expression of real suffering and a protest against real suffering. Religion is the sigh of the oppressed creature, the heart of a heartless world, and the soul of soulless conditions. It is the opium of the people.",
     "Private property has made us so stupid and one-sided that an object is only ours when we have it – when it exists for us as capital, or when it is directly possessed, eaten, drunk, worn, inhabited, etc., – in short, when it is used by us. Although private property itself again conceives all these direct realisations of possession only as means of life, and the life which they serve as means is the life of private property – labour and conversion into capital.",
@@ -195,6 +197,22 @@ reaction = [
     "to what side of the wall did they flee?",
     "COMMUNISM does not work"
 ]
+
+# Functions
+def get_random_quote():
+    return random.choice(quotes)
+
+def get_random_figure():
+    return random.choice(figures)
+
+def get_random_reading():
+    return random.choice(readings)
+
+def get_random_reaction():
+    return random.choice(reaction)
+
+def get_random_fact():
+    return random.choice(facts)
 
 #command for figures
 @bot.tree.command(name="randomfigure", description="Get a random revolutionary figure and short bio.")
