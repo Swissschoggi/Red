@@ -16,7 +16,7 @@ Supports both **slash** (`/`) and **prefix** (`!`) commands:
 ---
 
 ## Add the bot
-[Add the bot](https://discord.com/oauth2/authorize?client_id=1376840332578132069)
+[Add the bot](https://discord.com/channels/@me/1278984424695926808/1376897487918338159)
 
 ---
 
