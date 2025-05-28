@@ -22,9 +22,6 @@ intents.members = True
 #Bot setup
 bot = commands.Bot(command_prefix='!', intents=intents)
 
-#Quote list
-
-#Quote list
 quotes = [
     "Religious suffering is, at one and the same time, the expression of real suffering and a protest against real suffering. Religion is the sigh of the oppressed creature, the heart of a heartless world, and the soul of soulless conditions. It is the opium of the people.",
     "Private property has made us so stupid and one-sided that an object is only ours when we have it – when it exists for us as capital, or when it is directly possessed, eaten, drunk, worn, inhabited, etc., – in short, when it is used by us. Although private property itself again conceives all these direct realisations of possession only as means of life, and the life which they serve as means is the life of private property – labour and conversion into capital.",
@@ -199,38 +196,57 @@ reaction = [
     "COMMUNISM does not work"
 ]
 
+#command for figures
 @bot.tree.command(name="randomfigure", description="Get a random revolutionary figure and short bio.")
 async def random_figure_command(interaction: discord.Interaction):
-    figure = random.choice(figures)
-    await interaction.response.send_message(figure)
+    await interaction.response.send_message(get_random_figure())
 
-#Slash command: /reading
+@bot.command(name="figure")
+async def figure_prefix(ctx):
+    await ctx.send(get_random_figure())
+
+#command for /reading
 @bot.tree.command(name="reading", description="Get a recommended socialist or communist text to read.")
 async def reading_command(interaction: discord.Interaction):
-    item = random.choice(readings)
-
+    item = get_random_reading()
     embed = discord.Embed(
         title=item["title"],
-        url=item["url"],  # Clickable title
+        url=item["url"],
         description=f"**Author:** {item['author']}\n[Read it here]({item['url']})",
         color=0xE00000
     )
-
     await interaction.response.send_message(embed=embed)
 
-#Slash command: Quote
+@bot.command(name="reading")
+async def reading_prefix(ctx):
+    item = get_random_reading()
+    embed = discord.Embed(
+        title=item["title"],
+        url=item["url"],
+        description=f"**Author:** {item['author']}\n[Read it here]({item['url']})",
+        color=0xE00000
+    )
+    await ctx.send(embed=embed)
+
+#command to get a Quote
 @bot.tree.command(name="quote", description="Get a random communist quote.")
 async def quote_command(interaction: discord.Interaction):
-    selected = random.choice(quotes)
-    await interaction.response.send_message(selected)# Store per-guild daily quote channels
-daily_quote_channels = {}
+    await interaction.response.send_message(get_random_quote())
 
+@bot.command(name="quote")
+async def quote_prefix(ctx):
+    await ctx.send(get_random_quote())
+
+#command to get reactionary reactions
 @bot.tree.command(name="reactionary", description="Get a random reactionary reaction.")
 async def reactionary_command(interaction: discord.Interaction):
-    item = random.choice(reaction)
-    await interaction.response.send_message(item)
+    await interaction.response.send_message(get_random_reaction())
 
-#Slash command: setup daily quotes
+@bot.command(name="reactionary")
+async def reactionary_prefix(ctx):
+    await ctx.send(get_random_reaction())
+
+#command to setup daily quotes
 @bot.tree.command(name="setdailyquotes", description="Set the channel and optional role for daily quotes.")
 @app_commands.describe(channel="The channel for daily quotes", role="Optional role to mention")
 @app_commands.checks.has_permissions(administrator=True)
@@ -244,6 +260,16 @@ async def set_daily_quotes(interaction: discord.Interaction, channel: discord.Te
         f"✅ Daily quotes will be sent to {channel.mention}" + (f" and mention {role.mention}" if role else "")
     )
 
+@bot.tree.command(name="stopdaily", description="Stop daily quotes in this server.")
+@app_commands.checks.has_permissions(administrator=True)
+async def stop_daily_command(interaction: discord.Interaction):
+    guild_id = interaction.guild_id
+    if guild_id in daily_quote_channels:
+        del daily_quote_channels[guild_id]
+        await interaction.response.send_message("🛑 Daily quotes have been stopped for this server.")
+    else:
+        await interaction.response.send_message("ℹ️ No daily quote is currently set for this server.")
+
 #Background task to send daily quote
 @bot.tree.command(name="stopdaily", description="Stop daily quotes in this server.")
 @app_commands.checks.has_permissions(administrator=True)
@@ -256,18 +282,31 @@ async def stop_daily_command(interaction: discord.Interaction):
     else:
         await interaction.response.send_message("ℹ️ No daily quote is currently set for this server.")
 
+#command for a random communist fact
 @bot.tree.command(name="fact", description="Get a random communist or socialist historical fact.")
 async def fact_command(interaction: discord.Interaction):
-    selected_fact = random.choice(facts)
-    await interaction.response.send_message(selected_fact)
+    await interaction.response.send_message(get_random_fact())
+
+@bot.command(name="fact")
+async def fact_prefix(ctx):
+    await ctx.send(get_random_fact())
+
+#listening to /reading
+@bot.event
+async def on_ready():
+    await bot.tree.sync()
+    activity = discord.Activity(type=discord.ActivityType.listening, name="/reading")
+    await bot.change_presence(activity=activity)
+    print(f"Bot is ready. Logged in as {bot.user}")
 
 #Sync commands & start loop
 @bot.event
 async def on_ready():
     await bot.tree.sync()
     send_daily_quotes.start()
+    activity = discord.Activity(type=discord.ActivityType.listening, name="/reading")
+    await bot.change_presence(activity=activity)
     print(f"Bot ready as {bot.user}")
-
 
 #Run bot
 bot.run(TOKEN)
