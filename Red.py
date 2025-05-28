@@ -137,6 +137,16 @@ def get_random_figure():
 def get_random_reading():
     return random.choice(readings)
 
+@bot.tree.command(name="reporttrotskyist", description="Report a Trotskyist and laugh at them.")
+@app_commands.describe(user="The Trotskyist to report")
+async def report_trotskyist(interaction: discord.Interaction, user: discord.Member):
+    await interaction.response.send_message(f"HAHAHAHHAHAHAHA {user.mention} is a trotskyist laugh at them")
+
+@bot.tree.command(name="reporttankie", description="Report a Tankie and laught at them.")
+@app_commands.describe(user="The Tankie to report")
+async def report_tankie(interaction: discord.Interaction, user: discord.Member):
+    await interaction.response.send_message(f"HAHAHAHAHAHAHAHAH {user.mention} is a tankie, laught at them!")
+
 #command for study group
 @bot.tree.command(name="studygroup", description="Create a temporary study voice channel.")
 @app_commands.describe(name="Name of the study group")
