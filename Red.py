@@ -270,18 +270,6 @@ async def stop_daily_command(interaction: discord.Interaction):
     else:
         await interaction.response.send_message("ℹ️ No daily quote is currently set for this server.")
 
-#Background task to send daily quote
-@bot.tree.command(name="stopdaily", description="Stop daily quotes in this server.")
-@app_commands.checks.has_permissions(administrator=True)
-async def stop_daily_command(interaction: discord.Interaction):
-    guild_id = interaction.guild_id
-
-    if guild_id in daily_quote_channels:
-        del daily_quote_channels[guild_id]
-        await interaction.response.send_message("🛑 Daily quotes have been stopped for this server.")
-    else:
-        await interaction.response.send_message("ℹ️ No daily quote is currently set for this server.")
-
 #command for a random communist fact
 @bot.tree.command(name="fact", description="Get a random communist or socialist historical fact.")
 async def fact_command(interaction: discord.Interaction):
