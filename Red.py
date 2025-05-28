@@ -10,6 +10,22 @@ from dotenv import load_dotenv
 import aiohttp
 import json
 
+DAILY_QUOTES_FILE = "daily_quote_channels.json"
+
+def save_daily_quote_channels():
+    with open(DAILY_QUOTES_FILE, "w", encoding="utf-8") as f:
+        json.dump(daily_quote_channels, f)
+
+def load_daily_quote_channels():
+    global daily_quote_channels
+    try:
+        with open(DAILY_QUOTES_FILE, "r", encoding="utf-8") as f:
+            daily_quote_channels = json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        daily_quote_channels = {}
+
+load_daily_quote_channels()
+
 with open("data.json", "r", encoding="utf-8") as f:
     data = json.load(f)
 
@@ -206,11 +222,12 @@ async def reactionary_prefix(ctx):
 @app_commands.describe(channel="The channel for daily quotes", role="Optional role to mention")
 @app_commands.checks.has_permissions(administrator=True)
 async def set_daily_quotes(interaction: discord.Interaction, channel: discord.TextChannel, role: discord.Role = None):
-    guild_id = interaction.guild_id
+    guild_id = str(interaction.guild_id)  # Use str for JSON keys consistency
     daily_quote_channels[guild_id] = {
         "channel_id": channel.id,
         "role_id": role.id if role else None
     }
+    save_daily_quote_channels()  # <-- Save after change
     await interaction.response.send_message(
         f"✅ Daily quotes will be sent to {channel.mention}" + (f" and mention {role.mention}" if role else "")
     )
@@ -218,13 +235,14 @@ async def set_daily_quotes(interaction: discord.Interaction, channel: discord.Te
 @bot.tree.command(name="stopdaily", description="Stop daily quotes in this server.")
 @app_commands.checks.has_permissions(administrator=True)
 async def stop_daily_command(interaction: discord.Interaction):
-    guild_id = interaction.guild_id
+    guild_id = str(interaction.guild_id)
     if guild_id in daily_quote_channels:
         del daily_quote_channels[guild_id]
+        save_daily_quote_channels()  # <-- Save after change
         await interaction.response.send_message("🛑 Daily quotes have been stopped for this server.")
     else:
         await interaction.response.send_message("ℹ️ No daily quote is currently set for this server.")
-
+        
 #command for a random communist fact
 @bot.tree.command(name="fact", description="Get a random communist or socialist historical fact.")
 async def fact_command(interaction: discord.Interaction):
