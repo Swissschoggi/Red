@@ -198,7 +198,7 @@ reaction = [
     "COMMUNISM does not work"
 ]
 
-# Functions
+#Functions
 def get_random_quote():
     return random.choice(quotes)
 
@@ -214,6 +214,36 @@ def get_random_reaction():
 def get_random_fact():
     return random.choice(facts)
 
+#command for study group
+@bot.tree.command(name="studygroup", description="Create a temporary study voice channel.")
+@app_commands.describe(name="Name of the study group")
+async def studygroup(interaction: discord.Interaction, name: str):
+    guild = interaction.guild
+
+    #Find a suitable category or create one if needed
+    category = discord.utils.get(guild.categories, name="Study Groups")
+    if category is None:
+        category = await guild.create_category("Study Groups")
+
+    #Create voice channel
+    voice_channel = await guild.create_voice_channel(name=name, category=category)
+    
+    await interaction.response.send_message(
+        f"✅ Created study group voice channel: **{voice_channel.name}**", ephemeral=True
+    )
+    
+    #Background task to monitor the channel
+    async def monitor_channel():
+        await bot.wait_until_ready()
+        while True:
+            await asyncio.sleep(3600)
+            channel = guild.get_channel(voice_channel.id)
+            if channel and len(channel.members) == 0:
+                await channel.delete(reason="Study group is empty.")
+                break
+
+    bot.loop.create_task(monitor_channel())
+    
 #command for figures
 @bot.tree.command(name="randomfigure", description="Get a random revolutionary figure and short bio.")
 async def random_figure_command(interaction: discord.Interaction):
