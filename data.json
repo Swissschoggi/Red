@@ -94,7 +94,7 @@
     "The USSR acknowledged a total of 95 Communist parties"
 ],
 
-"reaction": [
+"reactionary_reactions": [
     "but communism has never worked out like that has it.",
     "Funny how every 'communist' is from a country that never experienced communism",
     "Leads to corruption and starvation.",
@@ -117,5 +117,29 @@
     "lazy loafer ,prize example of communism not working because communists don't work",
     "If communism worked, the soviets would've won the cold war",
     "Communism equals starvation..so yeah if you want people to die vote communism..."
+],
+"debunks": [
+    "communism leads to dictatorship: When reactionaries say this they most often refer to comrade Stalin.But this is deeply flawed, the USSR was governed by a council of soviets that were voted and could always be deposed. Stalin himself wanted to abolish his role of general secretary but was outvoted. He also dismissed people who called him a leader as it was unmarxist.",
+    "communism killed 100 million: This number stems from the black book of communism, which authers have since taken a big step away from that lie ridden book. It's more propaganda than analysis.",
+    "no incentive under communism: Communism promotes collective well-being and innovation for the social good. Many scientists, artists, and engineers thrived under planned systems.",
+    "capitalism won the cold war: The collapse of the USSR had complex causes — internal reform struggles, economic strain, and geopolitical shifts — not just capitalism 'winning'.",
+    "Everyone starves under communism: This mostly refers to the Holodomor Famine, that is said to be a man made genocide according to Ukrainians since the 90s. The Bad weather and Kulaks hiding and burning grain did not help however."
+],
+"RANKS": [
+    "Comrade",
+    "Red Cadet",
+    "People’s Historian",
+    "Party Organizer",
+    "Red Commissar",
+    "Dialectics Officer",
+    "Propaganda Minister",
+    "Chairman of Memes"
+],
+"crimes": [
+    "hoarding grain",
+    "bourgeois decadence",
+    "anti-soviet propaganda",
+    "sabotage",
+    "collaboration with imperialists"
 ]
 }
