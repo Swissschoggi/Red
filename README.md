@@ -32,7 +32,7 @@ Supports **slash** (`/`) commands only:
 /gulag            - Sends a user to the GULAG (timeout)
 ```
 
-### 🗳️ Elections (Optional Features)
+### 🗳️ Elections
 ```
 /election_start           - Start elections for something
 /election_nominate        - Nominate yourself or others
