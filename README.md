@@ -1,6 +1,6 @@
 # 🔴 Red
 
-**Red** is a simple project created during school time, a true commie bot for your server of revolutionaries! 🚩
+**Red** is a simple project created during school time, a true commie discord bot for your server of revolutionaries! 🚩
 
 ## ✨ Features
 
@@ -15,6 +15,8 @@ Supports both **slash** (`/`) and **prefix** (`!`) commands:
 - **`/studygroup`** - creates a temporary voice-channel for book study groups
 - **`/asklenin`** - Experimental feature currently hosted on my local LLM
 - **`/reporttroskyist`** - fun command to report a trotskysist and laught at them
+- **`/debunk`** - Sends randmon debunks of common anticommunist rhetorik
+- **`/Tankiemeter`** - Sends a evaluation of how communist you are (your ID is being stored for this, if you dont want that, dont use it)
 
 ---
 
@@ -31,5 +33,6 @@ Supports both **slash** (`/`) and **prefix** (`!`) commands:
 ## 🗳️ Suggestions Welcome!
 
 **Always open for recommendations to improve the bot!**
+Be it code wise or content wise.
 
 📬 Contact: `fynninyoass` on Discord
