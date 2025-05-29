@@ -32,6 +32,7 @@ with open("data.json", "r", encoding="utf-8") as f:
 quotes = data["quotes"]
 facts = data["facts"]
 reactionary_reactions = data["reactionary_reactions"]
+debunks = data["debunks"]
 
 load_dotenv()
 
@@ -136,6 +137,9 @@ def get_random_figure():
 
 def get_random_reading():
     return random.choice(readings)
+
+def get_random_debunk():
+    return random.choice(debunks)
 
 @bot.tree.command(name="reporttrotskyist", description="Report a Trotskyist and laugh at them.")
 @app_commands.describe(user="The Trotskyist to report")
@@ -249,9 +253,9 @@ async def stop_daily_command(interaction: discord.Interaction):
     if guild_id in daily_quote_channels:
         del daily_quote_channels[guild_id]
         save_daily_quote_channels()  # <-- Save after change
-        await interaction.response.send_message("🛑 Daily quotes have been stopped for this server.")
+        await interaction.response.send_message("Daily quotes have been stopped for this server.")
     else:
-        await interaction.response.send_message("ℹ️ No daily quote is currently set for this server.")
+        await interaction.response.send_message("No daily quote is currently set for this server.")
         
 #command for a random communist fact
 @bot.tree.command(name="fact", description="Get a random communist or socialist historical fact.")
@@ -300,6 +304,33 @@ async def ask_lenin(interaction: discord.Interaction, question: str):
         for i in range(0, len(response), 2000):
             chunk = response[i:i+2000]
             await interaction.followup.send(chunk)
+
+@bot.tree.command(name="debunk", description="Debunk a common anti-communist myth.")
+async def debunk_command(interaction: discord.Interaction):
+    await interaction.response.send_message(get_random_debunk())
+
+@bot.command(name="debunk")
+async def reactionary_prefix(ctx):
+    await ctx.send(get_random_debunk())
+
+@bot.tree.command(name="tankiemeter", description="Measure someone's tankie level.")
+@app_commands.describe(user="The user to evaluate")
+async def tankiemeter(interaction: discord.Interaction, user: discord.Member = None):
+    user = user or interaction.user
+    score = random.randint(0, 100)
+
+    if score < 20:
+        level = "🟩 Social Democrat – believes in healthcare but trusts NATO."
+    elif score < 50:
+        level = "🟨 Marxist-Leninist Curious – read Lenin once and liked the vibe."
+    elif score < 80:
+        level = "🟥 True Tankie – defends every 20th-century revolution."
+    else:
+        level = "🚩 Ultra Tankie – would defend the Berlin Wall with a hardcover Marx."
+
+    await interaction.response.send_message(
+        f"📊 **{user.mention} scores {score}% on the Tankiemeter!**\n{level}"
+    )
 
 #Sync commands & start loop
 @bot.event
