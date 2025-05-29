@@ -26,6 +26,29 @@ def load_daily_quote_channels():
 
 load_daily_quote_channels()
 
+import hashlib
+
+def get_tankie_score(user: discord.User) -> int:
+    #create a hash from the user's ID or name
+    user_id_str = str(user.id)
+    hash_digest = hashlib.sha256(user_id_str.encode()).hexdigest()
+    score = int(hash_digest[:4], 16) % 101
+    return score
+
+TANKIEMETER_FILE = "tankiemeter_scores.json"
+
+#load existing scores or initialize empty dict
+try:
+    with open(TANKIEMETER_FILE, "r", encoding="utf-8") as f:
+        tankie_scores = json.load(f)
+except (FileNotFoundError, json.JSONDecodeError):
+    tankie_scores = {}
+
+#save function
+def save_tankie_scores():
+    with open(TANKIEMETER_FILE, "w", encoding="utf-8") as f:
+        json.dump(tankie_scores, f)
+
 with open("data.json", "r", encoding="utf-8") as f:
     data = json.load(f)
 
@@ -33,6 +56,7 @@ quotes = data["quotes"]
 facts = data["facts"]
 reactionary_reactions = data["reactionary_reactions"]
 debunks = data["debunks"]
+figures = data["figures"]
 
 load_dotenv()
 
@@ -246,6 +270,20 @@ async def set_daily_quotes(interaction: discord.Interaction, channel: discord.Te
         f"✅ Daily quotes will be sent to {channel.mention}" + (f" and mention {role.mention}" if role else "")
     )
 
+@tasks.loop(hours=24)
+async def send_daily_quotes():
+    await bot.wait_until_ready()
+    for guild_id, info in daily_quote_channels.items():
+        channel = bot.get_channel(info["channel_id"])
+        role_id = info.get("role_id")
+        if channel:
+            message = get_random_quote()
+            if role_id:
+                role_mention = f"<@&{role_id}>"
+                await channel.send(f"{role_mention}\n{message}")
+            else:
+                await channel.send(message)
+
 @bot.tree.command(name="stopdaily", description="Stop daily quotes in this server.")
 @app_commands.checks.has_permissions(administrator=True)
 async def stop_daily_command(interaction: discord.Interaction):
@@ -297,7 +335,7 @@ async def ask_lenin(interaction: discord.Interaction, question: str):
         except Exception as e:
             response = f"⚠️ Error querying Lenin: {str(e)}"
 
-    # Send response safely, split if necessary
+    #send response safely, split if necessary
     if len(response) <= 2000:
         await interaction.followup.send(response)
     else:
@@ -310,15 +348,25 @@ async def debunk_command(interaction: discord.Interaction):
     await interaction.response.send_message(get_random_debunk())
 
 @bot.command(name="debunk")
-async def reactionary_prefix(ctx):
+async def debunk_prefix(ctx):
     await ctx.send(get_random_debunk())
 
 @bot.tree.command(name="tankiemeter", description="Measure someone's tankie level.")
 @app_commands.describe(user="The user to evaluate")
 async def tankiemeter(interaction: discord.Interaction, user: discord.Member = None):
     user = user or interaction.user
-    score = random.randint(0, 100)
+    user_id_str = str(user.id)
 
+    #check if score already exists
+    if user_id_str not in tankie_scores:
+        #generate and save a new score
+        score = random.randint(0, 100)
+        tankie_scores[user_id_str] = score
+        save_tankie_scores()
+    else:
+        score = tankie_scores[user_id_str]
+
+    #determine level
     if score < 20:
         level = "🟩 Social Democrat – believes in healthcare but trusts NATO."
     elif score < 50:
@@ -332,7 +380,8 @@ async def tankiemeter(interaction: discord.Interaction, user: discord.Member = N
         f"📊 **{user.mention} scores {score}% on the Tankiemeter!**\n{level}"
     )
 
-#Sync commands & start loop
+
+#sync commands & start loop
 @bot.event
 async def on_ready():
     await bot.tree.sync()
