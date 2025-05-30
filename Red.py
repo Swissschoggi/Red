@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 import aiohttp
 import json
 from datetime import timedelta
+import urllib.parse
 
 DAILY_QUOTES_FILE = "daily_quote_channels.json"
 
@@ -52,6 +53,10 @@ reactionary_reactions = data["reactionary_reactions"]
 debunks = data["debunks"]
 figures = data["figures"]
 crimes = data["crimes"]
+
+quote_cycle = []
+quote_index = 0
+
 def load_data():
     with open("data.json", "r") as f:
         return json.load(f)
@@ -149,23 +154,73 @@ readings = [
 import random
 
 def get_random_quote():
-    return random.choice(quotes)
+    global quote_cycle, quote_index
+    if not quote_cycle or quote_index >= len(quote_cycle):
+        quote_cycle = random.sample(quotes, len(quotes))  # shuffled copy
+        quote_index = 0
+    quote = quote_cycle[quote_index]
+    quote_index += 1
+    return quote
+
+fact_cycle = []
+fact_index = 0
 
 def get_random_fact():
-    return random.choice(facts)
+    global fact_cycle, fact_index
+    if not fact_cycle or fact_index >= len(fact_cycle):
+        fact_cycle = random.sample(facts, len(facts))
+        fact_index = 0
+    fact = fact_cycle[fact_index]
+    fact_index += 1
+    return fact
 
 def get_random_reaction():
     return random.choice(reactionary_reactions)
 
+reaction_cycle = []
+reaction_index = 0
+def get_random_reaction():
+    global reaction_cycle, reaction_index
+    if not reaction_cycle or reaction_index >= len(reaction_cycle):
+        reaction_cycle = random.sample(reactionary_reactions, len(reactionary_reactions))
+        reaction_index = 0
+    reaction = reaction_cycle[reaction_index]
+    reaction_index += 1
+    return reaction
+
+figure_cycle = []
+figure_index = 0
 def get_random_figure():
-    figure = random.choice(figures)
+    global figure_cycle, figure_index
+    if not figure_cycle or figure_index >= len(figure_cycle):
+        figure_cycle = random.sample(figures, len(figures))
+        figure_index = 0
+    figure = figure_cycle[figure_index]
+    figure_index += 1
     return f"**{figure['name']}**\n{figure['bio']}"
 
+reading_cycle = []
+reading_index = 0
 def get_random_reading():
-    return random.choice(readings)
+    global reading_cycle, reading_index
+    if not reading_cycle or reading_index >= len(reading_cycle):
+        reading_cycle = random.sample(readings, len(readings))
+        reading_index = 0
+    reading = reading_cycle[reading_index]
+    reading_index += 1
+    return reading
 
+
+debunk_cycle = []
+debunk_index = 0
 def get_random_debunk():
-    return random.choice(debunks)
+    global debunk_cycle, debunk_index
+    if not debunk_cycle or debunk_index >= len(debunk_cycle):
+        debunk_cycle = random.sample(debunks, len(debunks))
+        debunk_index = 0
+    debunk = debunk_cycle[debunk_index]
+    debunk_index += 1
+    return debunk
 
 @bot.tree.command(name="reporttrotskyist", description="Report a Trotskyist and laugh at them.")
 @app_commands.describe(user="The Trotskyist to report")
@@ -578,6 +633,37 @@ async def election_status(interaction: discord.Interaction, position: str):
 
     embed.set_footer(text="Election is currently open." if election["open"] else "Election is closed.")
     await interaction.response.send_message(embed=embed)
+
+from bs4 import BeautifulSoup
+
+@bot.tree.command(name="define", description="Get a definition from ProleWiki.")
+@app_commands.describe(term="The term you'd like to look up (e.g. dialectical materialism)")
+async def define_command(interaction: discord.Interaction, term: str):
+    await interaction.response.defer()
+
+    # Normalize the search term
+    title = term.strip().lower().replace(" ", "_")
+    url = f"https://en.prolewiki.org/wiki/{urllib.parse.quote(title)}"
+
+    headers = {
+        "User-Agent": "Mozilla/5.0 (compatible; RedBot/1.0; +https://github.com/yourbot)"
+    }
+
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url, headers=headers) as resp:
+            if resp.status == 200:
+                html = await resp.text()
+                soup = BeautifulSoup(html, 'html.parser')
+                p = soup.select_one("div.mw-parser-output > p")
+                summary = p.text.strip() if p else "No summary found."
+
+                await interaction.followup.send(
+                    f"📖 **{term.title()}** — {summary}\n🔗 {url}"
+                )
+            else:
+                await interaction.followup.send(
+                    f"Could not find a ProleWiki article for **{term}**."
+                )
 
 #sync commands & start loop
 @bot.event
