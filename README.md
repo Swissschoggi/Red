@@ -2,6 +2,8 @@
 
 **Red** is a simple project created during school time a true commie Discord bot for your server of revolutionaries! 🚩
 
+![Servers](https://img.shields.io/badge/dynamic/json?color=red&label=Servers&query=%24.server_count&url=https%3A%2F%2Fservers.gaechter.me%2Fservers)
+
 ## ✨ Features
 
 Supports **slash** (`/`) commands only:
