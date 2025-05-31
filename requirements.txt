@@ -1,2 +1,8 @@
 discord.py
 python-dotenv
+beautifulsoup4
+aiohttp
+flask
+requests
+Flask-Session
+flask_bootstrap
