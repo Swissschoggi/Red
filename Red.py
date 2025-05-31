@@ -11,6 +11,7 @@ import aiohttp
 import json
 from datetime import timedelta
 import urllib.parse
+import hashlib
 
 DAILY_QUOTES_FILE = "daily_quote_channels.json"
 
@@ -42,7 +43,7 @@ except (FileNotFoundError, json.JSONDecodeError):
 #save function
 def save_tankie_scores():
     with open(TANKIEMETER_FILE, "w", encoding="utf-8") as f:
-        json.dump(tankie_scores, f)
+        json.dump(tankie_scores, f, indent=4)
 
 with open("data.json", "r", encoding="utf-8") as f:
     data = json.load(f)
@@ -83,10 +84,53 @@ intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True
 
+def get_user_guilds():
+    """Get the list of guild IDs the logged-in user belongs to"""
+    return [str(g['id']) for g in session.get('guilds', [])]  # Ensure string IDs
+
+def filter_for_user_guilds(data):
+    """Filter elections/tankiemeter data to only show guilds the user can access"""
+    user_guilds = get_user_guilds()
+    return {
+        key: value for key, value in data.items()
+        if str(value.get("guild_id")) in user_guilds  # Match guild IDs
+    }
+
+# Tankiemeter functions
+def load_tankiemeter():
+    try:
+        with open(TANKIEMETER_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return []
+
+def save_tankiemeter(data):
+    with open(TANKIEMETER_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=4)
+
+# Initialize tankiemeter data
+tankiemeter_data = load_tankiemeter()
+
+with open("data.json", "r", encoding="utf-8") as f:
+    data = json.load(f)
+
 #Bot setup
 bot = commands.Bot(command_prefix='!', intents=intents)
 
 daily_quote_channels = {}
+
+from aiohttp import web
+
+async def handle_server_count(request):
+    return web.json_response({"server_count": len(bot.guilds)})
+
+async def start_web_server():
+    app = web.Application()
+    app.router.add_get('/servers', handle_server_count)
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, '0.0.0.0', 8346)
+    await site.start()
 
 readings = [
     {
@@ -177,7 +221,29 @@ def get_random_fact():
 def get_random_reaction():
     return random.choice(reactionary_reactions)
 
-reaction_cycle = []
+elections = {}
+
+def load_elections():
+    global elections
+    try:
+        with open("elections.json", "r") as f:
+            content = f.read().strip()
+            elections = json.loads(content) if content else {}
+    except (FileNotFoundError, json.JSONDecodeError):
+        elections = {}
+
+def save_elections():
+    print("🧪 save_elections() CALLED")
+    try:
+        with open("elections.json", "w") as f:
+            json.dump(elections, f, indent=2)
+        print("✅ Elections saved to elections.json")
+    except Exception as e:
+        print("❌ Failed to save elections:", e)
+
+load_elections()
+
+reaction_cycle = {}
 reaction_index = 0
 def get_random_reaction():
     global reaction_cycle, reaction_index
@@ -447,35 +513,55 @@ def save_scores(data):
         json.dump(data, f, indent=4)
 
 tankiemeter_scores = load_scores()
+load_elections()
+
+def get_user_guilds():
+    """Returns list of guild IDs the user belongs to"""
+    return [g['id'] for g in session.get('guilds', [])]
+
+def get_shared_guilds():
+    """Returns guilds where both user and bot have access"""
+    user_guilds = get_user_guilds()
+    with open('/app/elections.json') as f:
+        elections_data = json.load(f)
+    bot_guilds = {election['guild_id'] for election in elections_data.values()}
+    return set(user_guilds) & bot_guilds
 
 @bot.tree.command(name="tankiemeter", description="Measure someone's tankie level.")
 @app_commands.describe(user="The user to evaluate")
 async def tankiemeter(interaction: discord.Interaction, user: discord.Member = None):
     user = user or interaction.user
     user_id = str(user.id)
+    guild_id = str(interaction.guild.id)
 
-    #check if already stored
-    if user_id in tankiemeter_scores:
-        entry = tankiemeter_scores[user_id]
+    # Load existing scores or initialize if needed
+    if guild_id not in tankie_scores:
+        tankie_scores[guild_id] = {}
+    
+    guild_scores = tankie_scores[guild_id]
+
+    # Check if already stored
+    if user_id in guild_scores:
+        entry = guild_scores[user_id]
         score = entry["score"]
         bonuses = entry["bonuses"]
     else:
-        #generate deterministic base score
+        # Generate deterministic base score
         hash_input = user.name + str(user.id)
         hash_digest = hashlib.md5(hash_input.encode()).hexdigest()
         base_score = int(hash_digest[:2], 16) % 101
         score = base_score
         bonuses = []
 
-        #username-based bonuses
+        # Username-based bonuses
         username = user.name.lower()
-        if "Lenin" in username:
+        if "lenin" in username:
             score += 10
             bonuses.append("Username contains 'Lenin'")
-        elif "Marx" in username:
+        elif "marx" in username:
             score += 10
             bonuses.append("Username contains 'Marx'")
-        elif "Mao" in username:
+        elif "mao" in username:
             score += 7
             bonuses.append("Username contains 'Mao'")
         elif "comrade" in username:
@@ -485,26 +571,30 @@ async def tankiemeter(interaction: discord.Interaction, user: discord.Member = N
             score -= 5
             bonuses.append("Username contains 'trotsky'")
 
-        #role-based clues
+        # Role-based clues
         role_names = [role.name.lower() for role in user.roles]
-        if any("Leninist" in r for r in role_names):
+        if any("leninist" in r for r in role_names):
             score += 10
-            bonuses.append("Role includes 'maoist'")
+            bonuses.append("Role includes 'Leninist'")
+        if any("maoist" in r for r in role_names):
+            score += 10
+            bonuses.append("Role includes 'Maoist'")
         if any("anarchist" in r for r in role_names):
             score -= 5
             bonuses.append("Role includes 'anarchist'")
 
         score = max(0, min(score, 100))
 
-        #save result
-        tankiemeter_scores[user_id] = {
+        # Save result with guild context
+        guild_scores[user_id] = {
             "username": user.name,
             "score": score,
-            "bonuses": bonuses
+            "bonuses": bonuses,
+            "guild_id": guild_id
         }
-        save_scores(tankiemeter_scores)
+        save_tankie_scores()
 
-    #tankie level description
+    # Tankie level description
     if score < 20:
         level = "🟩 Social Democrat – believes in healthcare but trusts NATO."
     elif score < 50:
@@ -520,21 +610,39 @@ async def tankiemeter(interaction: discord.Interaction, user: discord.Member = N
         f"**{user.mention} scores {score}% on the Tankiemeter!**\n{level}\n\n**Analysis:**\n{bonus_msg}"
     )
 
-#Election system
+@bot.tree.command(name="tankiemeter_chart", description="Display a leaderboard of top tankies in this server.")
+async def tankiemeter_chart(interaction: discord.Interaction):
+    await interaction.response.defer()
+    guild_id = str(interaction.guild.id)
+    
+    # Get scores for this guild only
+    guild_scores = tankie_scores.get(guild_id, {})
+    
+    if not guild_scores:
+        await interaction.followup.send("No Tankiemeter scores found for this server.")
+        return
 
-def save_elections():
-    with open("elections.json", "w") as f:
-        json.dump(elections, f)
+    # Sort by score descending
+    sorted_scores = sorted(guild_scores.items(), key=lambda x: x[1]["score"], reverse=True)[:10]
 
-def load_elections():
-    global elections
-    try:
-        with open("elections.json", "r") as f:
-            elections = json.load(f)
-    except FileNotFoundError:
-        elections = {}
+    embed = discord.Embed(
+        title="Tankiemeter Leaderboard",
+        description="Top 10 comrades in this server by Tankiemeter score.",
+        color=0xE00000
+    )
 
-elections = {}
+    medals = ["🥇", "🥈", "🥉"] + ["🔴"] * 7
+
+    for i, (user_id, entry) in enumerate(sorted_scores):
+        try:
+            user = await interaction.guild.fetch_member(int(user_id))
+            name = user.display_name
+        except:
+            name = entry["username"]
+        score = entry["score"]
+        embed.add_field(name=f"{medals[i]} {name}", value=f"**{score}% Tankie**", inline=False)
+
+    await interaction.followup.send(embed=embed)
 
 @bot.tree.command(name="election_start", description="Start a new election for a role.")
 @app_commands.describe(position="The position to elect for (e.g., moderator)")
@@ -546,9 +654,11 @@ async def election_start(interaction: discord.Interaction, position: str):
         return
 
     elections[position] = {
+        "guild_id": str(interaction.guild.id),
         "candidates": {},
         "open": True
     }
+    save_elections()
     await interaction.response.send_message(f"Election started for **{position}**! Use `/election_nominate` to join.")
 
 @bot.tree.command(name="election_nominate", description="Nominate yourself or someone else as a candidate.")
@@ -567,6 +677,7 @@ async def election_nominate(interaction: discord.Interaction, position: str, use
         return
 
     elections[position]["candidates"][nominee_id] = 0
+    save_elections()
     await interaction.response.send_message(f"🗳️ {nominee.display_name} has been nominated for **{position}**.")
 
 @bot.tree.command(name="election_vote", description="Vote for a candidate.")
@@ -580,13 +691,26 @@ async def election_vote(interaction: discord.Interaction, position: str, user: d
         await interaction.response.send_message("No open election for that position.")
         return
 
-    if candidate_id not in elections[position]["candidates"]:
-        await interaction.response.send_message("That user is not a candidate.")
+    # Check if user has already voted
+    if voter_id in elections[position].get("voters", []):
+        await interaction.response.send_message("You have already voted in this election!", ephemeral=True)
         return
 
-    #prevent double vorting
+    if candidate_id not in elections[position]["candidates"]:
+        await interaction.response.send_message("That user is not a candidate.", ephemeral=True)
+        return
+
+    # Record the vote and mark voter as having voted
     elections[position]["candidates"][candidate_id] += 1
-    await interaction.response.send_message(f"Your vote for {user.display_name} has been counted.")
+    if "voters" not in elections[position]:
+        elections[position]["voters"] = []
+    elections[position]["voters"].append(voter_id)
+    save_elections()
+    
+    await interaction.response.send_message(
+        f"Your vote for has been counted.", 
+        ephemeral=True
+    )
 
 @bot.tree.command(name="election_close", description="Close election and announce winner.")
 @app_commands.describe(position="The position to close election for")
@@ -595,6 +719,7 @@ async def election_close(interaction: discord.Interaction, position: str):
     position = position.lower()
 
     if position not in elections or not elections[position]["open"]:
+        save_elections()
         await interaction.response.send_message("❌ No active election to close.")
         return
 
@@ -624,12 +749,26 @@ async def election_status(interaction: discord.Interaction, position: str):
         return
 
     election = elections[position]
+    candidates = election.get("candidates", {})
 
     embed = discord.Embed(
         title=f"📊 Election Status – {position.title()}",
-        description="Here are the current candidates and vote counts:",
         color=0xE00000
     )
+
+    if not candidates:
+        embed.description = "No candidates yet."
+    else:
+        description_lines = []
+        for uid, votes in candidates.items():
+            try:
+                member = await interaction.guild.fetch_member(int(uid))
+                name = member.display_name
+            except:
+                name = f"User {uid}"
+            description_lines.append(f"**{name}** – `{votes}` vote(s)")
+
+        embed.description = "\n".join(description_lines)
 
     embed.set_footer(text="Election is currently open." if election["open"] else "Election is closed.")
     await interaction.response.send_message(embed=embed)
@@ -670,6 +809,7 @@ async def define_command(interaction: discord.Interaction, term: str):
 async def on_ready():
     await bot.tree.sync()
     send_daily_quotes.start()
+    await start_web_server() 
     activity = discord.Activity(type=discord.ActivityType.listening, name="/reading")
     await bot.change_presence(activity=activity)
     print(f"{bot.user.name} is ready to serve the Revolution!")
