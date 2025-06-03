@@ -16,7 +16,6 @@ Supports **slash** (`/`) commands only:
 /reactionary    - Sends a random reactionary comment from my TikTok
 /reading        - Send a random reading recommendation
 /debunk         - Debunks anti-communist myths
-/tankiemeter    - Measures your tankie level (saved score)
 /asklenin       - Ask Comrade Lenin (running on my local LLM dont know how long i'll keep that in)
 /logbook        - Adds a book to your list which other users can check out using /readinglist
 ```
@@ -33,6 +32,8 @@ Supports **slash** (`/`) commands only:
 /reporttrotskyist - Report a user as a Trotskyist
 /reporttankie     - Report a user as a Tankie
 /gulag            - Sends a user to the GULAG (timeout)
+/meme             - Grabs a meme from reddit
+/tankiemeter    - Measures your tankie level (saved score)
 ```
 
 ### 🗳️ Elections
