@@ -13,6 +13,12 @@ from datetime import timedelta
 import urllib.parse
 import hashlib
 
+extensions = ["rank_system"]
+
+async def load_extensions():
+    for ext in extensions:
+        await bot.load_extension(ext)
+
 DAILY_QUOTES_FILE = "daily_quote_channels.json"
 
 def save_daily_quote_channels():
@@ -71,6 +77,19 @@ load_dotenv()
 OLLAMA_URL = os.getenv("OLLAMA_URL")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL")
 OLLAMA_SYSTEM_PROMPT = os.getenv("OLLAMA_SYSTEM_PROMPT")
+
+READING_LOG_FILE = "reading_logs.json"
+
+def load_reading_logs():
+    try:
+        with open(READING_LOG_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
+
+def save_reading_logs(logs):
+    with open(READING_LOG_FILE, "w", encoding="utf-8") as f:
+        json.dump(logs, f, indent=4)
 
 #Load .env variables
 load_dotenv()
@@ -455,14 +474,6 @@ async def fact_command(interaction: discord.Interaction):
 async def fact_prefix(ctx):
     await ctx.send(get_random_fact())
 
-#listening to /reading
-@bot.event
-async def on_ready():
-    await bot.tree.sync()
-    activity = discord.Activity(type=discord.ActivityType.listening, name="/reading")
-    await bot.change_presence(activity=activity)
-    print(f"Bot is ready. Logged in as {bot.user}")
-
 #experimental LLM support
 @bot.tree.command(name="asklenin", description="Ask Comrade Lenin a question.")
 @app_commands.describe(question="Your question for Lenin")
@@ -585,6 +596,27 @@ async def tankiemeter(interaction: discord.Interaction, user: discord.Member = N
 
         score = max(0, min(score, 100))
 
+        # Add chaos-based random events
+        chaotic_events = [
+            ("called himself a trotskyist once", -5),
+            ("named their cat after a commie", +10),
+            ("Listens to capitalist music", -6),
+            ("Memes about gulags too often", +3),
+            ("Follows CIA on Twitter", -12),
+            ("Once defended Gorbachev", -7),
+            ("Correctly used the term 'dialectics'", +4),
+            ("Runs a Trotskyist meme page", -10),
+            ("Listens to DPRK music", +5),
+            ("Leftcom.", -3),
+            ("Is used to agree with liberals to appease them", -20)
+        ]
+
+        random.shuffle(chaotic_events)
+        for event, delta in chaotic_events[:random.randint(1, 3)]:
+            score += delta
+            bonuses.append(f"{event} ({'+' if delta > 0 else ''}{delta})")
+
+
         # Save result with guild context
         guild_scores[user_id] = {
             "username": user.name,
@@ -595,12 +627,16 @@ async def tankiemeter(interaction: discord.Interaction, user: discord.Member = N
         save_tankie_scores()
 
     # Tankie level description
-    if score < 20:
-        level = "🟩 Social Democrat – believes in healthcare but trusts NATO."
+    if score < 10:
+        level = "Left-liberal – believes in healthcare but LOVEEES NATO."
+    elif score < 25:
+        level = "Socdem – Got class conscious but cant part with the system"
     elif score < 50:
-        level = "🟨 Marxist-Leninist Curious – read Lenin once and liked the vibe."
-    elif score < 80:
-        level = "🟥 True Tankie – defends every 20th-century revolution."
+        level = "Online tankie – Doesnt organize and spends his time online arguing with other commies"
+    elif score < 65:
+        level = "Armchair revolutionary - Sees himself as superior to everyone else and only reads, a lot"
+    elif score < 90:
+        level = "Revolutionary - Swears on his life that the USSR was the pinecale of human existence"
     else:
         level = "🚩 Ultra Tankie – would defend the Berlin Wall with a hardcover Marx."
 
@@ -773,46 +809,61 @@ async def election_status(interaction: discord.Interaction, position: str):
     embed.set_footer(text="Election is currently open." if election["open"] else "Election is closed.")
     await interaction.response.send_message(embed=embed)
 
-from bs4 import BeautifulSoup
+@bot.tree.command(name="logbook", description="Log a book you've read.")
+@app_commands.describe(title="Book title", author="Book author")
+async def logbook(interaction: discord.Interaction, title: str, author: str):
+    user_id = str(interaction.user.id)
+    logs = load_reading_logs()
 
-@bot.tree.command(name="define", description="Get a definition from ProleWiki.")
-@app_commands.describe(term="The term you'd like to look up (e.g. dialectical materialism)")
-async def define_command(interaction: discord.Interaction, term: str):
-    await interaction.response.defer()
+    if user_id not in logs:
+        logs[user_id] = []
 
-    # Normalize the search term
-    title = term.strip().lower().replace(" ", "_")
-    url = f"https://en.prolewiki.org/wiki/{urllib.parse.quote(title)}"
+    logs[user_id].append({"title": title, "author": author})
+    save_reading_logs(logs)
 
-    headers = {
-        "User-Agent": "Mozilla/5.0 (compatible; RedBot/1.0; +https://github.com/yourbot)"
-    }
+    await interaction.response.send_message(
+        f"📚 Logged **{title}** by *{author}* to your reading list."
+    )
+    
+@bot.tree.command(name="readinglist", description="View a user's reading list.")
+@app_commands.describe(user="The user whose reading list you want to see")
+async def readinglist(interaction: discord.Interaction, user: discord.Member = None):
+    user = user or interaction.user
+    user_id = str(user.id)
+    logs = load_reading_logs()
 
-    async with aiohttp.ClientSession() as session:
-        async with session.get(url, headers=headers) as resp:
-            if resp.status == 200:
-                html = await resp.text()
-                soup = BeautifulSoup(html, 'html.parser')
-                p = soup.select_one("div.mw-parser-output > p")
-                summary = p.text.strip() if p else "No summary found."
+    entries = logs.get(user_id, [])
 
-                await interaction.followup.send(
-                    f"📖 **{term.title()}** — {summary}\n🔗 {url}"
-                )
-            else:
-                await interaction.followup.send(
-                    f"Could not find a ProleWiki article for **{term}**."
-                )
+    if not entries:
+        await interaction.response.send_message(f"{user.display_name} has no books logged yet.")
+        return
 
-#sync commands & start loop
+    embed = discord.Embed(
+        title=f"{user.display_name}'s Reading List",
+        color=0xE00000
+    )
+
+    for entry in entries[:25]:  # Discord embed field limit
+        embed.add_field(name=entry["title"], value=entry["author"], inline=False)
+
+    await interaction.response.send_message(embed=embed)
+
 @bot.event
 async def on_ready():
+
+    # Sync slash commands
     await bot.tree.sync()
+
+    # Start background tasks
     send_daily_quotes.start()
-    await start_web_server() 
+    await start_web_server()
+
+    # Set bot presence
     activity = discord.Activity(type=discord.ActivityType.listening, name="/reading")
     await bot.change_presence(activity=activity)
-    print(f"{bot.user.name} is ready to serve the Revolution!")
+
+    # Print login info
+    print(f"Bot is ready. Logged in as {bot.user}")
 
 #Run bot
 bot.run(TOKEN)
