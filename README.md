@@ -18,6 +18,7 @@ Supports **slash** (`/`) commands only:
 /debunk         - Debunks anti-communist myths
 /tankiemeter    - Measures your tankie level (saved score)
 /asklenin       - Ask Comrade Lenin (running on my local LLM dont know how long i'll keep that in)
+/logbook        - Adds a book to your list which other users can check out using /readinglist
 ```
 
 ### 🛠️ Moderation
