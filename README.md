@@ -48,7 +48,7 @@ Supports **slash** (`/`) commands only:
 
 ## 📎 Add the bot
 
-[Add Red to your server](https://discord.com/oauth2/authorize?client_id=1376840332578132069&permissions=8&integration_type=0&scope=bot+applications.commands)
+[Add Red to your server]([https://discord.com/oauth2/authorize?client_id=1376840332578132069&permissions=8&integration_type=0&scope=bot+applications.commands](https://discord.com/oauth2/authorize?client_id=1376840332578132069&permissions=1101927663632&response_type=code&redirect_uri=https%3A%2F%2Fredweb.leninsbasement.com%2Fcallback&integration_type=0&scope=bot+applications.commands+applications.commands.permissions.update))
 
 ---
 
