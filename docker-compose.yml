@@ -10,18 +10,6 @@ services:
     depends_on:
       - db
 
-  web:
-    build: /srv/red
-    volumes:
-      - /srv/red:/app
-    working_dir: /app
-    env_file: /srv/red/.env
-    command: python web.py
-    ports:
-      - "8347:8347"
-    depends_on:
-      - db
-
   db:
     image: postgres:13
     environment:
