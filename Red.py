@@ -12,6 +12,16 @@ import json
 from datetime import timedelta
 import urllib.parse
 import hashlib
+import psycopg2
+from psycopg2.extras import RealDictCursor
+import asyncpg
+import time
+import praw
+import json
+
+# Load environment variables first
+load_dotenv()
+TOKEN = os.getenv('TOKEN')
 
 extensions = ["rank_system"]
 
@@ -20,6 +30,105 @@ async def load_extensions():
         await bot.load_extension(ext)
 
 DAILY_QUOTES_FILE = "daily_quote_channels.json"
+
+# Database pool with initialization tracking
+pool = None
+db_initialized = False
+db_initialization_lock = asyncio.Lock()
+
+async def init_db(retries=5, delay=2):
+    global pool, db_initialized
+    
+    async with db_initialization_lock:
+        if db_initialized:
+            return True
+            
+        for attempt in range(retries):
+            try:
+                print(f"🔄 Attempting database connection (attempt {attempt + 1}/{retries})...")
+                
+                pool = await asyncpg.create_pool(
+                    dsn=os.getenv('DATABASE_URL'),
+                    min_size=1,
+                    max_size=10,
+                    command_timeout=60
+                )
+                
+                # Test the connection
+                async with pool.acquire() as conn:
+                    await conn.execute("""
+                        CREATE TABLE IF NOT EXISTS elections (
+                            id SERIAL PRIMARY KEY,
+                            guild_id TEXT NOT NULL,
+                            position TEXT NOT NULL,
+                            candidate_name TEXT NOT NULL,
+                            candidate_id TEXT NOT NULL,
+                            votes INTEGER DEFAULT 0,
+                            open BOOLEAN DEFAULT TRUE,
+                            created_at TIMESTAMP DEFAULT NOW(),
+                            UNIQUE(guild_id, position, candidate_id)
+                        );
+                        
+                        CREATE TABLE IF NOT EXISTS election_voters (
+                            id SERIAL PRIMARY KEY,
+                            election_id INTEGER REFERENCES elections(id) ON DELETE CASCADE,
+                            voter_id TEXT NOT NULL,
+                            voted_at TIMESTAMP DEFAULT NOW(),
+                            UNIQUE(election_id, voter_id)
+                        );
+                        
+                        CREATE TABLE IF NOT EXISTS tankiemeter (
+                            id SERIAL PRIMARY KEY,
+                            guild_id TEXT NOT NULL,
+                            user_id TEXT NOT NULL,
+                            username TEXT NOT NULL,
+                            score INTEGER DEFAULT 0,
+                            bonuses JSONB DEFAULT '[]'::jsonb,
+                            updated_at TIMESTAMP DEFAULT NOW(),
+                            UNIQUE(guild_id, user_id)
+                        );
+                        
+                        CREATE TABLE IF NOT EXISTS reading_logs (
+                            id SERIAL PRIMARY KEY,
+                            user_id TEXT NOT NULL,
+                            title TEXT NOT NULL,
+                            author TEXT NOT NULL,
+                            logged_at TIMESTAMP DEFAULT NOW()
+                        );
+
+                        CREATE INDEX IF NOT EXISTS idx_tankiemeter_guild_score ON tankiemeter(guild_id, score DESC);
+                        CREATE INDEX IF NOT EXISTS idx_elections_guild_position ON elections(guild_id, position);
+                        CREATE INDEX IF NOT EXISTS idx_reading_logs_user ON reading_logs(user_id);
+                    """)
+                
+                db_initialized = True
+                print("🎉 Database initialization complete!")
+                return True
+                
+            except Exception as e:
+                print(f"❌ Database connection failed (attempt {attempt + 1}/{retries}): {e}")
+                if attempt < retries - 1:
+                    await asyncio.sleep(delay)
+                else:
+                    print("💥 All database connection attempts failed")
+                    return False
+
+async def ensure_db_connection():
+    """Ensure database connection is available"""
+    global pool, db_initialized
+    
+    if db_initialized and pool is not None:
+        try:
+            # Test if pool is still alive
+            async with pool.acquire() as conn:
+                await conn.execute("SELECT 1")
+            return True
+        except Exception:
+            print("🔄 Database pool is stale, reinitializing...")
+            db_initialized = False
+            pool = None
+    
+    return await init_db()
 
 def save_daily_quote_channels():
     with open(DAILY_QUOTES_FILE, "w", encoding="utf-8") as f:
@@ -39,14 +148,12 @@ import hashlib
 
 TANKIEMETER_FILE = "tankiemeter.json"
 
-#load existing scores or initialize empty dict
 try:
     with open(TANKIEMETER_FILE, "r", encoding="utf-8") as f:
         tankie_scores = json.load(f)
 except (FileNotFoundError, json.JSONDecodeError):
     tankie_scores = {}
 
-#save function
 def save_tankie_scores():
     with open(TANKIEMETER_FILE, "w", encoding="utf-8") as f:
         json.dump(tankie_scores, f, indent=4)
@@ -115,7 +222,15 @@ def filter_for_user_guilds(data):
         if str(value.get("guild_id")) in user_guilds  # Match guild IDs
     }
 
-# Tankiemeter functions
+#database connection
+def get_db_connection():
+    return psycopg2.connect(os.getenv('DATABASE_URL'))
+
+#async database connection for bot commands
+async def get_async_db_connection():
+    return await asyncpg.connect(os.getenv('DATABASE_URL'))
+
+#tankiemeter functions
 def load_tankiemeter():
     try:
         with open(TANKIEMETER_FILE, "r", encoding="utf-8") as f:
@@ -127,7 +242,7 @@ def save_tankiemeter(data):
     with open(TANKIEMETER_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=4)
 
-# Initialize tankiemeter data
+#initialize tankiemeter data
 tankiemeter_data = load_tankiemeter()
 
 with open("data.json", "r", encoding="utf-8") as f:
@@ -425,17 +540,15 @@ async def reactionary_command(interaction: discord.Interaction):
 async def reactionary_prefix(ctx):
     await ctx.send(get_random_reaction())
 
-#command to setup daily quotes
 @bot.tree.command(name="setdailyquotes", description="Set the channel and optional role for daily quotes.")
 @app_commands.describe(channel="The channel for daily quotes", role="Optional role to mention")
-@app_commands.checks.has_permissions(administrator=True)
 async def set_daily_quotes(interaction: discord.Interaction, channel: discord.TextChannel, role: discord.Role = None):
-    guild_id = str(interaction.guild_id)  # Use str for JSON keys consistency
+    guild_id = str(interaction.guild_id)  # ADD THIS LINE
     daily_quote_channels[guild_id] = {
         "channel_id": channel.id,
         "role_id": role.id if role else None
     }
-    save_daily_quote_channels()  # <-- Save after change
+    save_daily_quote_channels()
     await interaction.response.send_message(
         f"✅ Daily quotes will be sent to {channel.mention}" + (f" and mention {role.mention}" if role else "")
     )
@@ -455,7 +568,6 @@ async def send_daily_quotes():
                 await channel.send(message)
 
 @bot.tree.command(name="stopdaily", description="Stop daily quotes in this server.")
-@app_commands.checks.has_permissions(administrator=True)
 async def stop_daily_command(interaction: discord.Interaction):
     guild_id = str(interaction.guild_id)
     if guild_id in daily_quote_channels:
@@ -513,153 +625,178 @@ async def debunk_command(interaction: discord.Interaction):
 async def debunk_prefix(ctx):
     await ctx.send(get_random_debunk())
 
-def load_scores():
-    if os.path.exists(TANKIEMETER_FILE):
-        with open(TANKIEMETER_FILE, "r") as f:
-            return json.load(f)
-    return {}
 
-def save_scores(data):
-    with open(TANKIEMETER_FILE, "w") as f:
-        json.dump(data, f, indent=4)
-
-tankiemeter_scores = load_scores()
 load_elections()
 
 def get_user_guilds():
     """Returns list of guild IDs the user belongs to"""
     return [g['id'] for g in session.get('guilds', [])]
 
-def get_shared_guilds():
-    """Returns guilds where both user and bot have access"""
-    user_guilds = get_user_guilds()
-    with open('/app/elections.json') as f:
-        elections_data = json.load(f)
-    bot_guilds = {election['guild_id'] for election in elections_data.values()}
-    return set(user_guilds) & bot_guilds
-
 @bot.tree.command(name="tankiemeter", description="Measure someone's tankie level.")
 @app_commands.describe(user="The user to evaluate")
 async def tankiemeter(interaction: discord.Interaction, user: discord.Member = None):
-    user = user or interaction.user
-    user_id = str(user.id)
-    guild_id = str(interaction.guild.id)
-
-    # Load existing scores or initialize if needed
-    if guild_id not in tankie_scores:
-        tankie_scores[guild_id] = {}
+    # Defer response immediately to avoid timeout
+    await interaction.response.defer()
     
-    guild_scores = tankie_scores[guild_id]
+    # Ensure database connection
+    db_ok = await ensure_db_connection()
+    if not db_ok or pool is None:
+        await interaction.followup.send("❌ Database connection unavailable. Please try again later.")
+        return
 
-    # Check if already stored
-    if user_id in guild_scores:
-        entry = guild_scores[user_id]
-        score = entry["score"]
-        bonuses = entry["bonuses"]
+    user = user or interaction.user
+    guild_id = str(interaction.guild.id)
+    user_id = str(user.id)
+
+    try:
+        async with pool.acquire() as conn:
+            existing_score = await conn.fetchrow(
+                'SELECT score, bonuses FROM tankiemeter WHERE guild_id = $1 AND user_id = $2',
+                guild_id, user_id
+            )
+
+            if existing_score:
+                score = existing_score['score']
+                # FIX: Properly handle the bonuses JSON array
+                bonuses = existing_score['bonuses'] or []
+                # Ensure bonuses is a list, not a string
+                if isinstance(bonuses, str):
+                    try:
+                        bonuses = json.loads(bonuses)
+                    except:
+                        bonuses = []
+            else:
+                # deterministic base score
+                hash_input = user.name + str(user.id)
+                hash_digest = hashlib.md5(hash_input.encode()).hexdigest()
+                base_score = int(hash_digest[:2], 16) % 101
+                score = base_score
+                bonuses = []
+
+                # username bonuses
+                username = user.name.lower()
+                if "lenin" in username:
+                    score += 10
+                    bonuses.append("Username contains 'Lenin'")
+                elif "marx" in username:
+                    score += 10
+                    bonuses.append("Username contains 'Marx'")
+                elif "mao" in username:
+                    score += 7
+                    bonuses.append("Username contains 'Mao'")
+                elif "comrade" in username:
+                    score += 7
+                    bonuses.append("Username contains 'comrade'")
+                elif "trotsky" in username:
+                    score -= 5
+                    bonuses.append("Username contains 'Trotsky'")
+
+                # role-based bonuses
+                role_names = [role.name.lower() for role in user.roles]
+                if any("leninist" in r for r in role_names):
+                    score += 10
+                    bonuses.append("Role includes 'Leninist'")
+                if any("maoist" in r for r in role_names):
+                    score += 10
+                    bonuses.append("Role includes 'Maoist'")
+                if any("anarchist" in r for r in role_names):
+                    score -= 5
+                    bonuses.append("Role includes 'Anarchist'")
+
+                # chaos events
+                chaotic_events = [
+                    ("called himself a trotskyist once", -5),
+                    ("named their cat after a commie", +10),
+                    ("Listens to capitalist music", -6),
+                    ("Memes about gulags too often", +3),
+                    ("Follows CIA on Twitter", -12),
+                    ("Once defended Gorbachev", -7),
+                    ("Correctly used the term 'dialectics'", +4),
+                    ("Runs a Trotskyist meme page", -10),
+                    ("Listens to DPRK music", +5),
+                    ("Leftcom.", -3),
+                    ("Is used to agree with liberals to appease them", -20)
+                ]
+                random.shuffle(chaotic_events)
+                for event, delta in chaotic_events[:random.randint(1, 3)]:
+                    score += delta
+                    bonuses.append(f"{event} ({'+' if delta > 0 else ''}{delta})")
+
+                score = max(0, min(score, 100))
+
+                # FIX: Store bonuses as proper JSON
+                await conn.execute('''
+                    INSERT INTO tankiemeter (guild_id, user_id, username, score, bonuses)
+                    VALUES ($1, $2, $3, $4, $5::jsonb)
+                    ON CONFLICT (guild_id, user_id) 
+                    DO UPDATE SET score = $4, bonuses = $5::jsonb, updated_at = NOW()
+                ''', guild_id, user_id, user.name, score, bonuses)
+
+        # tankie level description
+        if score < 10:
+            level = "Left-liberal – believes in healthcare but LOVEEES NATO."
+        elif score < 25:
+            level = "Socdem – Got class conscious but can't part with the system"
+        elif score < 50:
+            level = "Online tankie – Doesn't organize and spends his time online arguing with other commies"
+        elif score < 65:
+            level = "Armchair revolutionary – Sees himself as superior to everyone else and only reads, a lot"
+        elif score < 90:
+            level = "Revolutionary – Swears on his life that the USSR was the pinnacle of human existence"
+        else:
+            level = "🚩 Ultra Tankie – would defend the Berlin Wall with a hardcover Marx."
+
+        # FIX: Properly format bonuses
+        if bonuses and isinstance(bonuses, list):
+            bonus_msg = "\n".join(f"> {bonus}" for bonus in bonuses)
+        else:
+            bonus_msg = "No bonus or penalty applied."
+
+        await interaction.followup.send(
+            f"**{user.mention} scores {score}% on the Tankiemeter!**\n{level}\n\n**Analysis:**\n{bonus_msg}"
+        )
+    
+    except Exception as e:
+        print(f"Error in tankiemeter command: {e}")
+        await interaction.followup.send("❌ Sorry, I encountered an error processing your request.")
+
+# Add a debug command to check database status
+@bot.tree.command(name="dbstatus", description="Check database connection status")
+async def dbstatus(interaction: discord.Interaction):
+    await interaction.response.defer()
+    
+    db_ok = await ensure_db_connection()
+    if db_ok and pool is not None:
+        try:
+            async with pool.acquire() as conn:
+                server_count = await conn.fetchval("SELECT COUNT(*) FROM tankiemeter")
+            await interaction.followup.send(f"✅ Database connection is working! Tankiemeter records: {server_count}")
+        except Exception as e:
+            await interaction.followup.send(f"⚠️ Database connected but query failed: {e}")
     else:
-        # Generate deterministic base score
-        hash_input = user.name + str(user.id)
-        hash_digest = hashlib.md5(hash_input.encode()).hexdigest()
-        base_score = int(hash_digest[:2], 16) % 101
-        score = base_score
-        bonuses = []
-
-        # Username-based bonuses
-        username = user.name.lower()
-        if "lenin" in username:
-            score += 10
-            bonuses.append("Username contains 'Lenin'")
-        elif "marx" in username:
-            score += 10
-            bonuses.append("Username contains 'Marx'")
-        elif "mao" in username:
-            score += 7
-            bonuses.append("Username contains 'Mao'")
-        elif "comrade" in username:
-            score += 7
-            bonuses.append("Username contains 'comrade'")
-        elif "trotsky" in username:
-            score -= 5
-            bonuses.append("Username contains 'trotsky'")
-
-        # Role-based clues
-        role_names = [role.name.lower() for role in user.roles]
-        if any("leninist" in r for r in role_names):
-            score += 10
-            bonuses.append("Role includes 'Leninist'")
-        if any("maoist" in r for r in role_names):
-            score += 10
-            bonuses.append("Role includes 'Maoist'")
-        if any("anarchist" in r for r in role_names):
-            score -= 5
-            bonuses.append("Role includes 'anarchist'")
-
-        score = max(0, min(score, 100))
-
-        # Add chaos-based random events
-        chaotic_events = [
-            ("called himself a trotskyist once", -5),
-            ("named their cat after a commie", +10),
-            ("Listens to capitalist music", -6),
-            ("Memes about gulags too often", +3),
-            ("Follows CIA on Twitter", -12),
-            ("Once defended Gorbachev", -7),
-            ("Correctly used the term 'dialectics'", +4),
-            ("Runs a Trotskyist meme page", -10),
-            ("Listens to DPRK music", +5),
-            ("Leftcom.", -3),
-            ("Is used to agree with liberals to appease them", -20)
-        ]
-
-        random.shuffle(chaotic_events)
-        for event, delta in chaotic_events[:random.randint(1, 3)]:
-            score += delta
-            bonuses.append(f"{event} ({'+' if delta > 0 else ''}{delta})")
-
-
-        # Save result with guild context
-        guild_scores[user_id] = {
-            "username": user.name,
-            "score": score,
-            "bonuses": bonuses,
-            "guild_id": guild_id
-        }
-        save_tankie_scores()
-
-    # Tankie level description
-    if score < 10:
-        level = "Left-liberal – believes in healthcare but LOVEEES NATO."
-    elif score < 25:
-        level = "Socdem – Got class conscious but cant part with the system"
-    elif score < 50:
-        level = "Online tankie – Doesnt organize and spends his time online arguing with other commies"
-    elif score < 65:
-        level = "Armchair revolutionary - Sees himself as superior to everyone else and only reads, a lot"
-    elif score < 90:
-        level = "Revolutionary - Swears on his life that the USSR was the pinecale of human existence"
-    else:
-        level = "🚩 Ultra Tankie – would defend the Berlin Wall with a hardcover Marx."
-
-    bonus_msg = "\n".join(f"> {b}" for b in bonuses) if bonuses else "No bonus or penalty applied."
-
-    await interaction.response.send_message(
-        f"**{user.mention} scores {score}% on the Tankiemeter!**\n{level}\n\n**Analysis:**\n{bonus_msg}"
-    )
+        await interaction.followup.send("❌ Database connection failed")
 
 @bot.tree.command(name="tankiemeter_chart", description="Display a leaderboard of top tankies in this server.")
 async def tankiemeter_chart(interaction: discord.Interaction):
     await interaction.response.defer()
     guild_id = str(interaction.guild.id)
     
-    # Get scores for this guild only
-    guild_scores = tankie_scores.get(guild_id, {})
+    conn = await get_async_db_connection()
     
-    if not guild_scores:
+    #Get top 10 scores for this guild
+    scores = await conn.fetch('''
+        SELECT username, score, bonuses 
+        FROM tankiemeter 
+        WHERE guild_id = $1 
+        ORDER BY score DESC 
+        LIMIT 10
+    ''', guild_id)
+    
+    await conn.close()
+
+    if not scores:
         await interaction.followup.send("No Tankiemeter scores found for this server.")
         return
-
-    # Sort by score descending
-    sorted_scores = sorted(guild_scores.items(), key=lambda x: x[1]["score"], reverse=True)[:10]
 
     embed = discord.Embed(
         title="Tankiemeter Leaderboard",
@@ -669,32 +806,41 @@ async def tankiemeter_chart(interaction: discord.Interaction):
 
     medals = ["🥇", "🥈", "🥉"] + ["🔴"] * 7
 
-    for i, (user_id, entry) in enumerate(sorted_scores):
-        try:
-            user = await interaction.guild.fetch_member(int(user_id))
-            name = user.display_name
-        except:
-            name = entry["username"]
-        score = entry["score"]
-        embed.add_field(name=f"{medals[i]} {name}", value=f"**{score}% Tankie**", inline=False)
+    for i, record in enumerate(scores):
+        embed.add_field(
+            name=f"{medals[i]} {record['username']}", 
+            value=f"**{record['score']}% Tankie**", 
+            inline=False
+        )
 
     await interaction.followup.send(embed=embed)
 
 @bot.tree.command(name="election_start", description="Start a new election for a role.")
 @app_commands.describe(position="The position to elect for (e.g., moderator)")
-@commands.has_permissions(administrator=True)
 async def election_start(interaction: discord.Interaction, position: str):
     position = position.lower()
-    if position in elections and elections[position]["open"]:
+    guild_id = str(interaction.guild.id)
+    
+    conn = await get_async_db_connection()
+    
+    #Check if election already exists and is open
+    existing = await conn.fetchrow(
+        'SELECT id FROM elections WHERE guild_id = $1 AND position = $2 AND open = TRUE',
+        guild_id, position
+    )
+    
+    if existing:
+        await conn.close()
         await interaction.response.send_message(f"An election for '{position}' is already running.")
         return
 
-    elections[position] = {
-        "guild_id": str(interaction.guild.id),
-        "candidates": {},
-        "open": True
-    }
-    save_elections()
+    #Create new election
+    await conn.execute(
+        'INSERT INTO elections (guild_id, position, candidate_name, candidate_id, votes) VALUES ($1, $2, $3, $4, $5)',
+        guild_id, position, 'placeholder', 'placeholder', 0
+    )
+    
+    await conn.close()
     await interaction.response.send_message(f"Election started for **{position}**! Use `/election_nominate` to join.")
 
 @bot.tree.command(name="election_nominate", description="Nominate yourself or someone else as a candidate.")
@@ -702,18 +848,41 @@ async def election_start(interaction: discord.Interaction, position: str):
 async def election_nominate(interaction: discord.Interaction, position: str, user: discord.Member = None):
     position = position.lower()
     nominee = user or interaction.user
-    nominee_id = str(nominee.id)
-
-    if position not in elections or not elections[position]["open"]:
+    guild_id = str(interaction.guild.id)
+    
+    conn = await get_async_db_connection()
+    
+    #check if election exists and is open
+    election = await conn.fetchrow(
+        'SELECT id FROM elections WHERE guild_id = $1 AND position = $2 AND open = TRUE',
+        guild_id, position
+    )
+    
+    if not election:
+        await conn.close()
         await interaction.response.send_message("No open election for that position.")
         return
 
-    if nominee_id in elections[position]["candidates"]:
+    election_id = election['id']
+    
+    #Check if already nominated
+    existing = await conn.fetchrow(
+        'SELECT id FROM elections WHERE guild_id = $1 AND position = $2 AND candidate_id = $3',
+        guild_id, position, str(nominee.id)
+    )
+    
+    if existing:
+        await conn.close()
         await interaction.response.send_message(f"{nominee.display_name} is already nominated.")
         return
 
-    elections[position]["candidates"][nominee_id] = 0
-    save_elections()
+    #Add candidate
+    await conn.execute(
+        'INSERT INTO elections (guild_id, position, candidate_name, candidate_id, votes) VALUES ($1, $2, $3, $4, $5)',
+        guild_id, position, nominee.display_name, str(nominee.id), 0
+    )
+    
+    await conn.close()
     await interaction.response.send_message(f"🗳️ {nominee.display_name} has been nominated for **{position}**.")
 
 @bot.tree.command(name="election_vote", description="Vote for a candidate.")
@@ -721,149 +890,257 @@ async def election_nominate(interaction: discord.Interaction, position: str, use
 async def election_vote(interaction: discord.Interaction, position: str, user: discord.Member):
     voter_id = str(interaction.user.id)
     candidate_id = str(user.id)
+    guild_id = str(interaction.guild.id)
     position = position.lower()
 
-    if position not in elections or not elections[position]["open"]:
-        await interaction.response.send_message("No open election for that position.")
-        return
+    conn = await get_async_db_connection()
 
-    # Check if user has already voted
-    if voter_id in elections[position].get("voters", []):
-        await interaction.response.send_message("You have already voted in this election!", ephemeral=True)
-        return
-
-    if candidate_id not in elections[position]["candidates"]:
-        await interaction.response.send_message("That user is not a candidate.", ephemeral=True)
-        return
-
-    # Record the vote and mark voter as having voted
-    elections[position]["candidates"][candidate_id] += 1
-    if "voters" not in elections[position]:
-        elections[position]["voters"] = []
-    elections[position]["voters"].append(voter_id)
-    save_elections()
-    
-    await interaction.response.send_message(
-        f"Your vote for has been counted.", 
-        ephemeral=True
+    # Find the election
+    election = await conn.fetchrow(
+        'SELECT id FROM elections WHERE guild_id = $1 AND position = $2 AND open = TRUE',
+        guild_id, position
     )
+    if not election:
+        await conn.close()
+        await interaction.response.send_message("❌ No open election for that position.")
+        return
+
+    election_id = election['id']
+
+    # Check if candidate is valid
+    candidate = await conn.fetchrow(
+        'SELECT id FROM elections WHERE guild_id = $1 AND position = $2 AND candidate_id = $3 AND open = TRUE',
+        guild_id, position, candidate_id
+    )
+    if not candidate:
+        await conn.close()
+        await interaction.response.send_message("❌ That user is not nominated in this election.")
+        return
+
+    # Check if voter already voted
+    already_voted = await conn.fetchrow(
+        'SELECT id FROM election_voters WHERE election_id = $1 AND voter_id = $2',
+        election_id, voter_id
+    )
+    if already_voted:
+        await conn.close()
+        await interaction.response.send_message("❌ You have already voted in this election.")
+        return
+
+    # Record the vote
+    await conn.execute(
+        'INSERT INTO election_voters (election_id, voter_id) VALUES ($1, $2)',
+        election_id, voter_id
+    )
+    await conn.execute(
+        'UPDATE elections SET votes = votes + 1 WHERE id = $1',
+        candidate['id']
+    )
+
+    await conn.close()
+    await interaction.response.send_message(f"✅ Your vote for **{user.display_name}** has been recorded!")
+
 
 @bot.tree.command(name="election_close", description="Close election and announce winner.")
 @app_commands.describe(position="The position to close election for")
-@commands.has_permissions(administrator=True)
 async def election_close(interaction: discord.Interaction, position: str):
     position = position.lower()
+    guild_id = str(interaction.guild.id)
 
-    if position not in elections or not elections[position]["open"]:
-        save_elections()
+    conn = await get_async_db_connection()
+    
+    #Check if election exists and is open
+    election = await conn.fetchrow(
+        'SELECT id FROM elections WHERE guild_id = $1 AND position = $2 AND open = TRUE',
+        guild_id, position
+    )
+    
+    if not election:
+        await conn.close()
         await interaction.response.send_message("❌ No active election to close.")
         return
 
-    elections[position]["open"] = False
-    candidates = elections[position]["candidates"]
+    election_id = election['id']
+    
+    #get all candidates and their votes for this election
+    candidates = await conn.fetch(
+        'SELECT candidate_name, candidate_id, votes FROM elections WHERE guild_id = $1 AND position = $2 AND candidate_name != $3',
+        guild_id, position, 'placeholder'
+    )
+    
     if not candidates:
+        await conn.close()
         await interaction.response.send_message("No candidates. Election void.")
         return
 
-    winner_id = max(candidates, key=candidates.get)
-    votes = candidates[winner_id]
+    #gind the winner
+    winner = max(candidates, key=lambda x: x['votes'])
+    winner_name = winner['candidate_name']
+    winner_id = winner['candidate_id']
+    votes = winner['votes']
 
-    winner = await interaction.guild.fetch_member(int(winner_id))
-    await interaction.response.send_message(f"🎉 {winner.mention} has won the **{position}** election with {votes} votes!")
-
-    role = discord.utils.get(interaction.guild.roles, name="Moderator")
-    if role and winner:
-        await winner.add_roles(role)
-
-@bot.tree.command(name="election_status", description="View current status of an ongoing election.")
-@app_commands.describe(position="The position you want to check the election for")
-async def election_status(interaction: discord.Interaction, position: str):
-    position = position.lower()
-
-    if position not in elections:
-        await interaction.response.send_message("❌ There is no election by that name.")
-        return
-
-    election = elections[position]
-    candidates = election.get("candidates", {})
-
-    embed = discord.Embed(
-        title=f"📊 Election Status – {position.title()}",
-        color=0xE00000
+    #close the election
+    await conn.execute(
+        'UPDATE elections SET open = FALSE WHERE guild_id = $1 AND position = $2',
+        guild_id, position
     )
+    
+    await conn.close()
 
-    if not candidates:
-        embed.description = "No candidates yet."
-    else:
-        description_lines = []
-        for uid, votes in candidates.items():
-            try:
-                member = await interaction.guild.fetch_member(int(uid))
-                name = member.display_name
-            except:
-                name = f"User {uid}"
-            description_lines.append(f"**{name}** – `{votes}` vote(s)")
+    try:
+        winner_member = await interaction.guild.fetch_member(int(winner_id))
+        winner_mention = winner_member.mention
+    except:
+        winner_mention = winner_name
 
-        embed.description = "\n".join(description_lines)
+    await interaction.response.send_message(f"🎉 {winner_mention} has won the **{position}** election with {votes} votes!")
 
-    embed.set_footer(text="Election is currently open." if election["open"] else "Election is closed.")
-    await interaction.response.send_message(embed=embed)
+    role_name = position.title()  # or use a mapping for specific roles
+    role = discord.utils.get(interaction.guild.roles, name=role_name)
+    if role and winner_member:
+        try:
+            await winner_member.add_roles(role)
+            await interaction.followup.send(f"✅ {role_name} role assigned to {winner_mention}!")
+        except discord.Forbidden:
+            await interaction.followup.send("❌ Could not assign role (missing permissions).")
 
 @bot.tree.command(name="logbook", description="Log a book you've read.")
 @app_commands.describe(title="Book title", author="Book author")
 async def logbook(interaction: discord.Interaction, title: str, author: str):
     user_id = str(interaction.user.id)
-    logs = load_reading_logs()
-
-    if user_id not in logs:
-        logs[user_id] = []
-
-    logs[user_id].append({"title": title, "author": author})
-    save_reading_logs(logs)
-
-    await interaction.response.send_message(
-        f"📚 Logged **{title}** by *{author}* to your reading list."
-    )
     
+    conn = await get_async_db_connection()
+    await conn.execute(
+        'INSERT INTO reading_logs (user_id, title, author) VALUES ($1, $2, $3)',
+        user_id, title, author
+    )
+    await conn.close()
+
+    await interaction.response.send_message(f"📚 Logged **{title}** by *{author}* to your reading list.")
+
 @bot.tree.command(name="readinglist", description="View a user's reading list.")
 @app_commands.describe(user="The user whose reading list you want to see")
 async def readinglist(interaction: discord.Interaction, user: discord.Member = None):
     user = user or interaction.user
     user_id = str(user.id)
-    logs = load_reading_logs()
-
-    entries = logs.get(user_id, [])
+    
+    conn = await get_async_db_connection()
+    entries = await conn.fetch(
+        'SELECT title, author, logged_at FROM reading_logs WHERE user_id = $1 ORDER BY logged_at DESC LIMIT 25',
+        user_id
+    )
+    await conn.close()
 
     if not entries:
         await interaction.response.send_message(f"{user.display_name} has no books logged yet.")
         return
 
-    embed = discord.Embed(
-        title=f"{user.display_name}'s Reading List",
-        color=0xE00000
-    )
+    embed = discord.Embed(title=f"{user.display_name}'s Reading List", color=0xE00000)
 
-    for entry in entries[:25]:  # Discord embed field limit
-        embed.add_field(name=entry["title"], value=entry["author"], inline=False)
+    for entry in entries:
+        embed.add_field(name=entry['title'], value=f"by {entry['author']}", inline=False)
 
     await interaction.response.send_message(embed=embed)
 
+#Function to initialize praw after the bot starts
+def init_reddit():
+    reddit = praw.Reddit(client_id=CLIENT_ID, client_secret=CLIENT_SECRET, user_agent=USER_AGENT)
+    return reddit
+
+#Fetch meme function using praw (in a thread)
+async def fetch_communist_meme(reddit):
+    loop = asyncio.get_event_loop()
+    hot_posts = await loop.run_in_executor(None, lambda: list(reddit.subreddit("CommunismMemes").hot(limit=10)))
+
+    image_posts = [(post.url, post.author.name) for post in hot_posts if post.url.endswith(('jpg', 'jpeg', 'png', 'gif'))]
+
+    if image_posts:
+        meme_url, author = random.choice(image_posts)  # Correct unpacking
+        return meme_url, author
+    else:
+        return None, None
+
+@bot.tree.command(name="meme", description="Get a random meme from r/communismmemes")
+async def meme_command(interaction: discord.Interaction):
+    await interaction.response.defer()
+
+    try:
+        reddit = praw.Reddit(
+            client_id=os.getenv("REDDIT_CLIENT_ID"),
+            client_secret=os.getenv("REDDIT_CLIENT_SECRET"),
+            user_agent=os.getenv("REDDIT_USER_AGENT")
+        )
+
+        subreddit = reddit.subreddit("communismmemes")
+        posts = [post for post in subreddit.hot(limit=50) if not post.stickied]
+        post = random.choice(posts)
+
+        embed = discord.Embed(
+            title=post.title,
+            url=f"https://reddit.com{post.permalink}",
+            color=0xE00000
+        )
+        if post.url.endswith((".jpg", ".jpeg", ".png", ".gif")):
+            embed.set_image(url=post.url)
+        else:
+            embed.description = post.url  # fallback if it's not an image
+
+        await interaction.followup.send(embed=embed)
+
+    except Exception as e:
+        await interaction.followup.send(f"⚠️ Failed to fetch meme: {e}")
+
+def save_server_count_to_db(count):
+    conn = psycopg2.connect(os.getenv("DATABASE_URL"))
+    cur = conn.cursor()
+    cur.execute("""
+        INSERT INTO server_counts (server_count, updated_at)
+        VALUES (%s, NOW())
+        ON CONFLICT (id) DO UPDATE SET server_count = EXCLUDED.server_count, updated_at = NOW()
+    """, (count,))
+    conn.commit()
+    cur.close()
+    conn.close()
+
+
 @bot.event
 async def on_ready():
-
-    # Sync slash commands
-    await bot.tree.sync()
-
+    print(f"✅ {bot.user} has connected to Discord!")
+    
+    # Initialize database first
+    print("🔄 Initializing database...")
+    db_success = await init_db()
+    
+    if db_success:
+        print("✅ Database initialized successfully")
+    else:
+        print("❌ Database initialization failed - some features may not work")
+    
+    # Sync commands
+    try:
+        await bot.tree.sync()
+        print("✅ Commands synced")
+    except Exception as e:
+        print(f"❌ Command sync failed: {e}")
+    
     # Start background tasks
-    send_daily_quotes.start()
-    await start_web_server()
+    if not send_daily_quotes.is_running():
+        send_daily_quotes.start()
+        print("✅ Daily quotes task started")
+    
+    # Start web server
+    try:
+        await start_web_server()
+        print("✅ Web server started")
+    except Exception as e:
+        print(f"❌ Web server failed: {e}")
 
-    # Set bot presence
     activity = discord.Activity(type=discord.ActivityType.listening, name="/reading")
     await bot.change_presence(activity=activity)
 
-    # Print login info
-    print(f"Bot is ready. Logged in as {bot.user}")
+    print(f"🎉 Bot is fully ready. Logged in as {bot.user}")
 
-#Run bot
-bot.run(TOKEN)
+# Run bot
+if __name__ == "__main__":
+    print("🚀 Starting bot...")
+    bot.run(TOKEN)

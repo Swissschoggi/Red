@@ -1,0 +1,37 @@
+version: "3"
+services:
+  bot:
+    build: /srv/red
+    volumes:
+      - /srv/red:/app
+    working_dir: /app
+    env_file: /srv/red/.env
+    command: python red.py
+    depends_on:
+      - db
+
+  web:
+    build: /srv/red
+    volumes:
+      - /srv/red:/app
+    working_dir: /app
+    env_file: /srv/red/.env
+    command: python web.py
+    ports:
+      - "8347:8347"
+    depends_on:
+      - db
+
+  db:
+    image: postgres:13
+    environment:
+      POSTGRES_DB: bot_data
+      POSTGRES_USER: bot_user
+      POSTGRES_PASSWORD: bot_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5433:5432"
+
+volumes:
+  postgres_data:
